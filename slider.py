@@ -518,7 +518,6 @@ if __name__ == '__main__':
     sorter_camera = cameras.CamProcessor("00K81747629", "sorter")
 
 
-
     rentgen_check_camera = sorter_camera
     # rentgen_check_camera = cameras.CamProcessor("XXXXXXXXX")
 
@@ -577,7 +576,7 @@ if __name__ == '__main__':
     working_z_height = -80.
 
 
-    
+
     # position_0 = [8, 240, 0]  #[x,y,z]
     # position_target = [8, 240, -50 , 0]
     # working_z_height = 0
