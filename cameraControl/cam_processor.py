@@ -19,7 +19,7 @@ import time
 
 
 
-def show_image(image, name="Image"):
+def show_image(image, name="SImage"):
     
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)
 
@@ -44,6 +44,7 @@ class CamProcessor:
         deviceList = MV_CC_DEVICE_INFO_LIST()
         tlayerType = MV_USB_DEVICE
         self.name = name
+        self.background = None
 
         # ch:枚举设备 | en:Enum device
         ret = MvCamera.MV_CC_EnumDevices(tlayerType, deviceList)
@@ -145,7 +146,7 @@ class CamProcessor:
     
         ret = self.cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
         if None != stOutFrame.pBufAddr and 0 == ret:
-            print(self.name + " get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (stOutFrame.stFrameInfo.nWidth, stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nFrameNum))
+            # print(self.name + " get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (stOutFrame.stFrameInfo.nWidth, stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nFrameNum))
             
             # Convert the image data pointer to a numpy array
             img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
@@ -173,6 +174,10 @@ class CamProcessor:
         return normalize_img(self.get_image())
 
     def lookup_package(self):
+
+        # if(self.background is None):
+        #     raise ValueError("Background is not set. Capture background first.")
+
         # Start grabbing images
         ret = self.cam.MV_CC_StartGrabbing()
         if ret != 0:
@@ -183,42 +188,45 @@ class CamProcessor:
         prev_frame = None
         motion_counter = 0
         threshold = 2
-        stop_motion_threshold = 4
+        stop_motion_threshold = 3   # 3 pictures in row without motion to stop the package
 
         stOutFrame = MV_FRAME_OUT()  
         memset(byref(stOutFrame), 0, sizeof(stOutFrame))
-        
+
         while True:
-            
+
             # Get the image buffer
             ret = self.cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
             if stOutFrame.pBufAddr and ret == 0:
                 # Convert the image data pointer to a numpy array
                 img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
-                # img_gray = cv2.cvtColor(img_data, cv2.COLOR_BGR2GRAY)
-                # gauss_img_data = cv2.GaussianBlur(img_data, (3, 3), 0)
-                gauss_img_data = normalize_img(img_data)
-                # gauss_img_data = cv2.GaussianBlur(img_data, (5, 5), 0)
+                gauss_img_data = normalize_and_reduce_img(img_data)
+
                 if prev_frame is not None:
                     
+                    # TODO musím aktualizovat background periodicky, protože se hrozně rychle mění světelné podmínky
+
 
                     # Compare current frame with the previous frame to detect motion
                     if mse(gauss_img_data, prev_frame) > threshold: # is in motion
                         motion_counter = 0
                         print(self.name + " is in motion - the diff is: ", mse(gauss_img_data, prev_frame))
-                    elif mse(gauss_img_data, self.background) < threshold+5:  # is background
+                    elif mse(gauss_img_data, self.background) < threshold+3:  # is background
                         motion_counter = 0
                         print(self.name + " is background - the diff is: ", mse(gauss_img_data, prev_frame))
+                        # update background
+                        self.update_background(img=gauss_img_data)
                         # sleep and let other threads more computation time
                         time.sleep(0.2)
                     else:                   # is not moving and is not background
                         motion_counter += 1
                         gauss_img_data = np.uint8((prev_frame * 0.5) + (gauss_img_data * 0.5))
                         print(self.name + " is on place - the diff is: ", mse(gauss_img_data, prev_frame))
-                        
+
                     # If no motion is detected for some consecutive frames, assume the package has stopped moving
                     if motion_counter >= stop_motion_threshold:
                         print(self.name + " Package stopped moving.")
+                        prev_frame = img_data
                         break
 
                 prev_frame = gauss_img_data
@@ -227,7 +235,7 @@ class CamProcessor:
             else:
                 print("camera error - no data[0x%x]" % ret)
                 sys.exit()
-            time.sleep(0.4)
+            time.sleep(0.2)
 
 
         # Stop grabbing images
@@ -237,29 +245,44 @@ class CamProcessor:
             sys.exit()
 
         return prev_frame  # Return the image of the stopped package
-    
+
     def wait_for_background(self):
         
+        if(self.background is None):
+            raise ValueError("Background is not set. Capture background first.")
+
         while(True):
             time.sleep(0.2)
-            new_image = self.get_normalized_image()
+            new_image = normalize_and_reduce_img(self.get_image())
             dif = mse(new_image, self.background)
             # show_image(new_image)
             print(self.name + " diff is: ", dif)
-            if dif < 2:  # is background
+            if dif < 6:  # is background
+                # update background
+                self.update_background()
+
+
                 # double check?
                 # if mse(cv2.GaussianBlur(self.get_image(), (3, 3), 0), self.background) < 5:  # is background
                 #     break
                 break
-            time.sleep(1)
+            # time.sleep(1)
 
     def capture_background(self):
-        self.background = self.get_normalized_image()
-        # self.background = cv2.GaussianBlur(self.background, (3, 3), 0)
-        self.height, self.width = self.background.shape[:2]
+        # self.background = self.get_normalized_image()
+        background = self.get_image()
+        self.height, self.width = background.shape[:2]
         print(self.name + " shape of background (and camera resoltion): height:", self.height, " width:", self.width)
+        self.background = normalize_and_reduce_img(background)
+
         return self.background
     
+    def update_background(self, img=None):
+        if img is not None:
+            self.background = np.uint8((self.background * 0.7) + (img * 0.3))
+        else:
+            self.background = np.uint8((self.background * 0.7) + (normalize_and_reduce_img(self.get_image()) * 0.3))
+            
     def stream_vision(self):
         while True:
             sec = input("how many sec do you want to see video?:")
@@ -569,10 +592,23 @@ def mse(img1, img2):
    return mse
 
 def normalize_img(img):
-    # img = self.get_image()
-    img = cv2.GaussianBlur(img, (3, 3), 0)
+    img = cv2.GaussianBlur(img, (5, 5), 0)
     mean = np.mean(img)
 
+
+    img_normalized = (img - mean + 128)
+
+    img_normalized = np.clip(img_normalized,0,255)
+
+    img_normalized = np.uint8(img_normalized)
+
+    return img_normalized
+
+def normalize_and_reduce_img(img):
+    img = cv2.GaussianBlur(img, (5, 5), 0)
+    img = cv2.resize(img, None, fx=0.25, fy=0.25, interpolation=cv2.INTER_LINEAR)
+
+    mean = np.mean(img)
 
     img_normalized = (img - mean + 128)
 

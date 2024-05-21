@@ -346,7 +346,7 @@ def OCR_control(base_dicts, train_img, text_mask, H, results):
     for item in base_dicts:
         train_string, N = re.subn(item["clean_text"], '', train_string, 1)
         if N != 1:
-            print("CHYBA: nenašel jsem jednu část z base")
+            # print("CHYBA: nenašel jsem jednu část z base")
             isSame = False
             missed_words.append(item)
         # print(word)
@@ -359,8 +359,8 @@ def OCR_control(base_dicts, train_img, text_mask, H, results):
     for miss in missed_words:
 
         distance = Levenshtein.distance(train_string, cleanse_word(miss["text"]), weights=(1,0,1))
-        print("miss: ", miss["text"])
-        print("distance: ", distance)
+        # print("miss: ", miss["text"])
+        # print("distance: ", distance)
         cv2.rectangle(result_image, (miss["left"]-5, miss["top"]-5), (miss["left"]+miss["width"]+5,miss["top"]+miss["height"]+5), (0), 3)    
     print("text bin at the end was: ", train_string)
 
@@ -524,6 +524,24 @@ if __name__ == '__main__':
     # sorter_camera.stream_vision()
 
 
+    # DEMO for camera detection background and motion
+    # sorter_camera.capture_background()
+
+
+    # d.show_image(sorter_camera.background)
+    # d.active_wait()
+
+    # while(True):
+    #     img = sorter_camera.lookup_package()
+    #     d.show_image(img)
+    #     d.active_wait()
+
+    #     # wait for background (blocking)
+    #     sorter_camera.wait_for_background()
+    #     d.show_image(sorter_camera.background)
+    #     d.active_wait()
+
+
     print(" I N I T    B A S E    D A T A  ")
     print("--------------------------------")
 
@@ -599,7 +617,6 @@ if __name__ == '__main__':
     robot_points = robot_points.tolist()
     if len(robot_points) == 0:
         robot_points.append(sorter_camera.imagePoint_to_robotPoint([1500,1000]).tolist())
-        # print("TUTOK:", robot_points[-1])
 
     # try and check all position moves for any mistakes and colision
     path = [position_edge] + [robot_points[0][:-1]+[working_z_height]] + robot_points + [robot_points[-1][:-1]+[working_z_height]] + [position_edge] + [position_target] + [position_edge]
@@ -635,7 +652,7 @@ if __name__ == '__main__':
         while(True):
             # start thread for checking checker_free and if it frees, drop the package
             # thread:
-            waiter = threading.Thread(target=wait_for_checker_thread, args=(position_edge[:3]+[-90],))
+            waiter = threading.Thread(target=wait_for_checker_thread, args=(position_edge[:3]+[-50],))
             waiter.start()
 
             # look for package on table
@@ -678,7 +695,7 @@ if __name__ == '__main__':
             rob.move_until_DI(pack_position, 3, False)
             
             # move to transition point (next to edge so the package will not hit the edge)
-            tmp = position_edge
+            tmp = position_edge[:]
             tmp[1] = position_edge[1] - 70
             rob.mov(tmp)
 
@@ -692,8 +709,8 @@ if __name__ == '__main__':
 
                 # drop the package
                 rob.drop_pack()
-                # move above target and neutral rotation
-                rob.mov(position_edge[:3]+[-90])
+                # move above closer to picking area but away from camera
+                rob.mov(position_edge[:3]+[-50])
 
     def print_check_thread():
         global checker_free
@@ -735,11 +752,25 @@ if __name__ == '__main__':
             print_check_camera.wait_for_background()
             checker_free = True
 
-    # Create threads
-    # t1 = threading.Thread(target=sorting_thread, args=(sorter_camera,))
+    def dummy_print_check_thread():
+        global checker_free
+        global print_check_camera
+        global image_queue
+        while(True):
+            
+            # img = print_check_camera.get_image()
+            time.sleep(4)
+            # image_queue.put(img)
+            checker_free = True
 
+
+
+
+    # Create threads
     t1 = threading.Thread(target=sorting_thread)
     t2 = threading.Thread(target=print_check_thread)
+    # dummy thread for testing
+    # t2 = threading.Thread(target=dummy_print_check_thread)
 
     # Start threads
     t1.start()
