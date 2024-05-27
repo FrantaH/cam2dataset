@@ -48,6 +48,7 @@ class RobotProcessor:
 
         self.H = None
         self.text_log = ""
+        self.sucking = False
         
         try:
             self.dashboard_handle = DobotApiDashboard(
@@ -71,8 +72,7 @@ class RobotProcessor:
         self.dashboard_handle.CP(100)
         self.dashboard_handle.SpeedFactor(40) # reducing robot speed when initialize (for safety) - change for performance
 
-        feed_thread = Thread(target=self.feed_back)
-        feed_thread.setDaemon(True)
+        feed_thread = Thread(target=self.feed_back, daemon=True)
         feed_thread.start()
         
         self.alarm_controller_dict = self.convert_dict(alarm_controller_list)
@@ -121,7 +121,7 @@ class RobotProcessor:
         self.dashboard_handle.StopDrag()
         return points
 
-    def get_DI(self, idx, get_type = "query"):
+    def get_DI(self, idx, get_type = "feed"):
         if get_type == "query":
             return self.dashboard_handle.DI(idx)
         elif get_type == "feed":
@@ -180,7 +180,7 @@ class RobotProcessor:
     def mirror(self):
         points = self.get_draging_points()
         if len(points)<2:
-            print("jsi piča a zadal jsi málo bodů")
+            print("zadal jsi málo bodů")
             return
 
         if self.feed['speed_scaling'] > 40:
@@ -271,6 +271,7 @@ class RobotProcessor:
 
     def suck(self):
         self.set_DO(1,queue=True)
+        self.sucking = True
 
     def drop_pack(self):
         # turn off suck   que
@@ -281,6 +282,7 @@ class RobotProcessor:
         self.set_DO(2,queue=True)
         self.dashboard_handle.wait(100)
         self.unset_DO(2,queue=True)
+        self.sucking = False
 
     def feed_back(self):
         hasRead = 0
@@ -338,23 +340,11 @@ class RobotProcessor:
             alarm_dict[i["id"]] = i
         return alarm_dict
 
-# def transform_angle_for_arm(angle):
-#     '''
-#     angle: wanted rotation must be in interval (-180, 180)
-#     return: (rotation1, rotation2) where rotation is between -180 - 0
-#     '''
-#     # potřeba přepočíst úhel na polohy robota
-#     # aktuální max polohy robota: -180 až 90 (ideál -180 až 0) (-90 je aktuálně "střed")
-
-#     rot1 = (angle-180)/2
-#     rot2 = (-180-rot1)
-#     return (rot1,rot2)
-
 def transform_angle_for_arm(angle):
-    '''
+    """
     angle: wanted rotation must be in interval (0, 360)
     return: (rotation1, rotation2) where rotation is between -180 - 0
-    '''
+    """
     # potřeba přepočíst úhel na polohy robota
     # aktuální max polohy robota: -180 až 90 (ideál -180 až 0) (-90 je aktuálně "střed")
 
@@ -371,9 +361,18 @@ def transform_angle_for_arm(angle):
 
 
 
+class DumbRobotProcessor:
+    # def __getattr__(self, name):
+    #     print(f"called {name}")
+    def __getattr__(self, name):
+        # Check if the name is a common method prefix or not
+        def method(*args, **kwargs):
+            print(f"Called method: {name}")
+            return self  # Return self to allow chaining method calls
+        return method
 
 
-''' 
+"""
 
 
     def ui(self):    
@@ -856,4 +855,4 @@ def transform_angle_for_arm(angle):
         self.label_feed_dict[label[1][1]]["text"] = array_value[0][1]
         self.label_feed_dict[label[1][2]]["text"] = array_value[0][2]
         self.label_feed_dict[label[1][3]]["text"] = array_value[0][3]
-'''
+"""

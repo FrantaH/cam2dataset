@@ -173,7 +173,7 @@ class CamProcessor:
     def get_normalized_image(self):
         return normalize_img(self.get_image())
 
-    def lookup_package(self):
+    def lookup_package(self, threshold=2):
 
         # if(self.background is None):
         #     raise ValueError("Background is not set. Capture background first.")
@@ -187,7 +187,6 @@ class CamProcessor:
         # Variables to track motion
         prev_frame = None
         motion_counter = 0
-        threshold = 2
         stop_motion_threshold = 3   # 3 pictures in row without motion to stop the package
 
         stOutFrame = MV_FRAME_OUT()  
@@ -203,8 +202,6 @@ class CamProcessor:
                 gauss_img_data = normalize_and_reduce_img(img_data)
 
                 if prev_frame is not None:
-                    
-                    # TODO musím aktualizovat background periodicky, protože se hrozně rychle mění světelné podmínky
 
 
                     # Compare current frame with the previous frame to detect motion
@@ -259,7 +256,7 @@ class CamProcessor:
             print(self.name + " diff is: ", dif)
             if dif < 6:  # is background
                 # update background
-                self.update_background()
+                self.update_background(img=new_image)
 
 
                 # double check?
@@ -511,29 +508,6 @@ class CamProcessor:
             print("calibration loaded")
             return True
 
-def work_thread(cam=0, pData=0, nDataSize=0):
-    stOutFrame = MV_FRAME_OUT()  
-    memset(byref(stOutFrame), 0, sizeof(stOutFrame))
-    while True:
-        ret = cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
-        if None != stOutFrame.pBufAddr and 0 == ret:
-            print("get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (stOutFrame.stFrameInfo.nWidth, stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nFrameNum))
-            
-            # Convert the image data pointer to a numpy array
-            img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
-            # Display the image using OpenCV
-            cv2.imshow('image', img_data)
-            cv2.waitKey(0)
-            del img_data
-            # libc.free(data_pointer)
-            
-            nRet = cam.MV_CC_FreeImageBuffer(stOutFrame)
-            # g_bExit = True
-        else:
-            print("no data[0x%x]" % ret)
-        # if g_bExit == True:
-        #     break
-
 def list_devices():
     
     deviceList = MV_CC_DEVICE_INFO_LIST()
@@ -595,11 +569,8 @@ def normalize_img(img):
     img = cv2.GaussianBlur(img, (5, 5), 0)
     mean = np.mean(img)
 
-
     img_normalized = (img - mean + 128)
-
     img_normalized = np.clip(img_normalized,0,255)
-
     img_normalized = np.uint8(img_normalized)
 
     return img_normalized
@@ -611,9 +582,7 @@ def normalize_and_reduce_img(img):
     mean = np.mean(img)
 
     img_normalized = (img - mean + 128)
-
     img_normalized = np.clip(img_normalized,0,255)
-
     img_normalized = np.uint8(img_normalized)
 
     return img_normalized
