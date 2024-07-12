@@ -3,7 +3,7 @@
 # flags '-c -d -v C:\test_h\CameraParams.xml -o CameraParams_header.py'
 from ctypes import *
 from cameraControl.CameraParams_const import *
-from cameraControl.PixelType_header import *
+# from cameraControl.PixelType_header import *
 
 STRING = c_char_p
 

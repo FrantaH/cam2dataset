@@ -2,3 +2,10 @@
 */__pycache__
 *.pyc
 TCP-IP-py-API/
+resources/general/
+resources/rentgen_images_old/
+image.jpg
+resources/print_box1_1/
+resources/rentgen_box1_1/
+resources\rentgen_box1_1
+resources\print_box1_1

@@ -27,7 +27,10 @@ class DisplayProcessor:
         # cv2.setMouseCallback(name, self.mouse_callback, {'window_name': name, 'click_fun': click_fun})
 
         # Move window to specified display (in this case to the left and down)
-        cv2.moveWindow(name, -3000, 500)
+        # cv2.moveWindow(name, -3000, 500)
+        cv2.moveWindow(name, 0, 0)
+
+
 
         # # cv2.resizeWindow(name, 1600, 900)  # Set your desired size here
 
@@ -52,7 +55,8 @@ class DisplayProcessor:
     def mouse_callback(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             print("click on coordinates x:",x," y:",y)
-            print(param)
+            print("collor:", self.image[y,x])
+            # print(param)
             if param['click_fun'] == cv2.destroyAllWindows:
                 cv2.destroyAllWindows()
             else:
@@ -83,7 +87,7 @@ class DisplayProcessor:
 
         # # Set window properties for full screen
         # cv2.setWindowProperty(name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
+        self.image = image
         cv2.imshow(self.name, image)
 
         cv2.waitKey(10)
@@ -97,7 +101,7 @@ class DisplayProcessor:
             print("key pressed, code: ", str(key))
             if "\27" == key or ord('n') == key:
                 break
-        
+
 
 if __name__ == '__main__':
 

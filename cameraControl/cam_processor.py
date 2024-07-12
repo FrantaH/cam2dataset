@@ -17,6 +17,8 @@ import math
 import os
 import time
 
+from cameraControl.PixelType_header import PixelType_Gvsp_Mono8, PixelType_Gvsp_RGB8_Packed
+
 
 
 def show_image(image, name="SImage"):
@@ -38,8 +40,9 @@ def show_image(image, name="SImage"):
     cv2.waitKey(1)
     # cv2.destroyAllWindows()
 
+
 class CamProcessor:
-    
+
     def __init__(self, serial, name, exposure_time = 0):
         deviceList = MV_CC_DEVICE_INFO_LIST()
         tlayerType = MV_USB_DEVICE
@@ -134,6 +137,9 @@ class CamProcessor:
             sys.exit()
 
     def get_image(self):
+        return cv2.cvtColor(self.get_rgb_image(), cv2.COLOR_RGB2GRAY)
+
+    def get_rgb_image(self):
 
         # en:Start grab image
         ret = self.cam.MV_CC_StartGrabbing()
@@ -145,19 +151,45 @@ class CamProcessor:
         memset(byref(stOutFrame), 0, sizeof(stOutFrame))
     
         ret = self.cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
-        if None != stOutFrame.pBufAddr and 0 == ret:
-            # print(self.name + " get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (stOutFrame.stFrameInfo.nWidth, stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nFrameNum))
-            
-            # Convert the image data pointer to a numpy array
-            img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
+
+        # print("pixel type: ", stOutFrame.stFrameInfo.enPixelType) # PixelType_Gvsp_BayerRG8
+        # print("frame len: ", stOutFrame.stFrameInfo.nFrameLen)
+
+
+
+        nRGBSize = stOutFrame.stFrameInfo.nWidth * stOutFrame.stFrameInfo.nHeight * 3
+        stConvertParam = MV_CC_PIXEL_CONVERT_PARAM_EX()
+        memset(byref(stConvertParam), 0, sizeof(stConvertParam))
+        stConvertParam.nWidth = stOutFrame.stFrameInfo.nWidth
+        stConvertParam.nHeight = stOutFrame.stFrameInfo.nHeight
+        stConvertParam.pSrcData = stOutFrame.pBufAddr
+        stConvertParam.nSrcDataLen = stOutFrame.stFrameInfo.nFrameLen
+        stConvertParam.enSrcPixelType = stOutFrame.stFrameInfo.enPixelType  
+        stConvertParam.enDstPixelType = PixelType_Gvsp_RGB8_Packed
+        stConvertParam.pDstBuffer = (c_ubyte * nRGBSize)()
+        stConvertParam.nDstBufferSize = nRGBSize
+
+        ret = self.cam.MV_CC_ConvertPixelTypeEx(stConvertParam)
+        if ret != 0:
+            print ("convert pixel fail! ret[0x%x]" % ret)
+            sys.exit()
+
+        if None != stConvertParam.pDstBuffer and 0 == ret:
+            img_data = np.ctypeslib.as_array(stConvertParam.pDstBuffer, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth, 3))
             img_data_copy = copy.deepcopy(img_data)
-            # Display the image using OpenCV
-            # cv2.imshow('image', img_data_copy)
-            # cv2.waitKey(0)
+
+
+        # if None != stOutFrame.pBufAddr and 0 == ret:
+        #     # print(self.name + " get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (stOutFrame.stFrameInfo.nWidth, stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nFrameNum))
+
+        #     # Convert the image data pointer to a numpy array
+        #     img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
+        #     img_data_copy = copy.deepcopy(img_data)
+
             del img_data
-            
+
             nRet = self.cam.MV_CC_FreeImageBuffer(stOutFrame)
-            
+
         else:
             print(self.name + " camera error - no data[0x%x]" % ret)
             sys.exit()
@@ -169,9 +201,9 @@ class CamProcessor:
             sys.exit()
 
         return img_data_copy
-    
+
     def get_normalized_image(self):
-        return normalize_img(self.get_image())
+        return normalize_and_reduce_img(self.get_image())
 
     def lookup_package(self, threshold=2):
 
@@ -273,22 +305,22 @@ class CamProcessor:
         self.background = normalize_and_reduce_img(background)
 
         return self.background
-    
+
     def update_background(self, img=None):
         if img is not None:
             self.background = np.uint8((self.background * 0.7) + (img * 0.3))
         else:
             self.background = np.uint8((self.background * 0.7) + (normalize_and_reduce_img(self.get_image()) * 0.3))
-            
-    def stream_vision(self):
+
+    def stream_vision(self, d):
         while True:
             sec = input("how many sec do you want to see video?:")
             if sec.isdigit():
-                self.stream_vision_timed(sec)
+                self.stream_vision_timed(sec, d)
             else:
                 break
 
-    def stream_vision_timed(self, sec):
+    def stream_vision_timed(self, sec, d):
         time_per_img = 500
         # en:Start grab image
         ret = self.cam.MV_CC_StartGrabbing()
@@ -299,24 +331,25 @@ class CamProcessor:
         stOutFrame = MV_FRAME_OUT()  
         memset(byref(stOutFrame), 0, sizeof(stOutFrame))
         for _ in range(int(float(sec)*1000/time_per_img)):
-                
+
             ret = self.cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
             if None != stOutFrame.pBufAddr and 0 == ret:
                 print("get one frame: Width[%d], Height[%d], nFrameNum[%d]" % (stOutFrame.stFrameInfo.nWidth, stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nFrameNum))
-                
+
                 # Convert the image data pointer to a numpy array
                 img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
                 img_data_copy = copy.deepcopy(img_data)
                 # Display the image using OpenCV
                 # cv2.namedWindow('image', cv2.WINDOW_NORMAL)
                 # cv2.resizeWindow('image', 1600, 900)
+                # d.show_image(img_data_copy)
                 cv2.imshow('Stream', img_data_copy)
                 cv2.waitKey(time_per_img)
                 # cv2.destroyAllWindows()
                 del img_data
-                
+
                 nRet = self.cam.MV_CC_FreeImageBuffer(stOutFrame)
-                
+
             else:
                 print("camera error - no data[0x%x]" % ret)
                 sys.exit()
@@ -328,6 +361,72 @@ class CamProcessor:
         if ret != 0:
             print ("stop grabbing fail! ret[0x%x]" % ret)
             sys.exit()
+
+    def get_ROI_image(self):
+        img = self.get_image()
+        
+        abs_diff = cv2.absdiff(normalize_and_reduce_img(img), self.background)
+        
+        # binarize by mean
+        _, binarized_image = cv2.threshold(abs_diff, np.mean(abs_diff), 255, cv2.THRESH_BINARY)
+
+        # find contours
+        contours, _ = cv2.findContours(binarized_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # filter small contours areas
+        papers = [cnt for cnt in contours if cv2.contourArea(cnt) > 10000]
+
+        papers = np.concatenate(papers)
+
+        # find bounding box of the papers
+        x, y, w, h = cv2.boundingRect(papers)
+        
+        # transoform coordinates to the original image size
+        x = int(x*4)
+        y = int(y*4)
+        w = int(w*4)
+        h = int(h*4)
+
+        # draw rectangle around the papers
+        cv2.rectangle(img, (x, y), (x+w, y+h), (120), 4)
+
+        # roi = img[y:y+h, x:x+w]
+
+        return abs_diff
+        # return roi
+        
+
+
+        # find edges
+        edges = cv2.Canny(img, 100, 200)
+
+
+
+        # binarize image
+        # _, binarized_image = cv2.threshold(img, np.mean(img)*1.5, 255, cv2.THRESH_BINARY)
+        _, binarized_image = cv2.threshold(img, np.mean(img)*1.2, 255, cv2.THRESH_BINARY)
+
+        # highlight edges
+        binarized_image[edges == 255] = 0
+
+        # find contours
+        contours, _ = cv2.findContours(binarized_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # find bounding box of the biggest contour
+        max_area = 0
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area > max_area:
+                max_area = area
+                max_cnt = cnt
+        
+        # cut ROI
+        x, y, w, h = cv2.boundingRect(max_cnt)
+        roi = binarized_image[y:y+h, x:x+w]
+
+
+        return abs_diff
+        # return binarized_image
 
     def get_pack_position(self, img):
 
@@ -415,7 +514,7 @@ class CamProcessor:
 
 
         # add correct rotation from approx_angle to more accurate measure pack_angle
-        angle_diff = (approx_angle%90) - pack_angle
+        angle_diff = (approx_angle % 90) - pack_angle
         if angle_diff > 45:
             pack_angle = (pack_angle + 90 + int(approx_angle/90)*90) % 360
         elif angle_diff < -45:
@@ -520,10 +619,10 @@ def list_devices():
         sys.exit()
 
     if deviceList.nDeviceNum == 0:
-        print ("find no device!")
+        print ("found no device!")
         sys.exit()
 
-    print ("Find %d devices!" % deviceList.nDeviceNum)
+    print ("Found %d devices!" % deviceList.nDeviceNum)
 
     for i in range(0, deviceList.nDeviceNum):
         mvcc_dev_info = cast(deviceList.pDeviceInfo[i], POINTER(MV_CC_DEVICE_INFO)).contents

@@ -1,10 +1,12 @@
 import threading
 import time
 
-import threadControl
-import robotControl.robot_processor as robots
-from imageProcessing.imageTools import process_package
 
+import robotControl.robot_processor as robots
+from imageProcessing.imageTools import process_package, rentgen_control
+import displayControl.display as displays
+import cameraControl.cam_processor as cameras
+from threadControl.threadControl import ThreadControl
 
 
 def wait_for_checker_thread(pos, shared):
@@ -21,7 +23,7 @@ def wait_for_checker_thread(pos, shared):
         # move above target and neutral rotation
         shared.robot.mov(pos)
 
-def sorting_thread(camera, shared, position_edge, position_target, working_z_height):
+def sorting_thread(camera: cameras.CamProcessor, shared: ThreadControl, position_edge, position_target, working_z_height):
     
     rob = shared.robot
     while(True):
@@ -87,29 +89,21 @@ def sorting_thread(camera, shared, position_edge, position_target, working_z_hei
             # move above closer to picking area but away from camera
             rob.mov(position_edge[:3]+[-50])
 
-def print_check_thread(camera, shared, baseinfo):
-    
+def print_check_thread(print_check_camera: cameras.CamProcessor, rentgen_check_camera: cameras.CamProcessor, shared: ThreadControl, baseinfo):
+
     while(True):
-        # return
         # look for image, ignore moving(changing) vision and background
-        img = camera.lookup_package(threshold=3)
-        # img = print_check_camera.get_image()
+        # img = print_check_camera.lookup_package(threshold=5)
+        # input("Press Enter to continue...")
+
+        img = print_check_camera.get_image()
         start_time = time.time()
 
-        rentgen_img = camera.get_image()
-        # rentgen_img = rentgen_check_camera.get_image()
+        rentgen_img = rentgen_check_camera.get_image()
 
-        # d.show_image(img)
-        shared.image_queue.put(img)
-
-
-        # enhance image of package (add contrast, filter, ...) - this function is crucial (commented because called in process_package)
-        # train_img = preprocess_trainImg(img)
-        # d.show_image(train_img)
 
         # compare img with base - this function is the largest and takes the most computation time
         result = process_package(baseinfo, img, rentgen_img)
-        # result = process_package(dmc_code, inverted_dilated_base, base_data_dict_list, base_img, img, text_mask, rentgen_img)
 
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -122,15 +116,66 @@ def print_check_thread(camera, shared, baseinfo):
         # if(result): open good
         # else: open bad
 
-        # wait for background (blocking), then change var leting another pack in
-        camera.wait_for_background()
+        # wait for background (blocking), then change var letting another pack in
+        # print_check_camera.wait_for_background()
+        input("Press Enter to continue...")
+        # rentgen_check_camera.update_background()
         shared.checker_free.set()
 
-def dummy_print_check_thread(camera, shared, _):
+def dummy_print_check_thread(camera1, camera2, shared: ThreadControl, _):
     while(True):
         
         # img = print_check_camera.get_image()
         time.sleep(4)
         # image_queue.put(img)
         shared.checker_free.set()
+
+
+
+def rentgen(camera, shared, baseinfo):
+    d = displays.DisplayProcessor()
+    import os
+    import cv2
+    import random
+
+    while(True):
+
+        img = camera.get_image()
+        # TODO load random image
+
+        # list all files in directories notOK and ok
+        files_bad = os.listdir("resources/rentgen_images/notOK")
+        # add path to files
+        files_bad = list(map(lambda x: "notOK/"+x, files_bad))
+
+
+        files_good = os.listdir("resources/rentgen_images/ok")
+        # add path to files
+        files_good = list(map(lambda x: "ok/"+x, files_good))
+
+        # concat files from both directories
+        files = files_bad + files_good
+
+        # load random file
+        img = cv2.imread("resources/rentgen_images/" + files[random.randint(0, len(files)-1)])
+
+
+        start_time = time.time()
+
+
+        d.show_image(img)
+        input("LOADED IMAGE (Enter to continue...)")
+
+        result = rentgen_control(d, img)
+
+
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print("Processing time for function was:", elapsed_time, "seconds")
+
+
+        # shared.image_queue.put(result)
+        d.show_image(result)
+        input("RESULT IMAGE (Enter to continue...)")
+
 

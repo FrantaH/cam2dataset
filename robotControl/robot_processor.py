@@ -232,6 +232,9 @@ class RobotProcessor:
             speed_arg = "SpeedL="+str(speed)
             self.mov(point, speed_arg, mtype="movl")
 
+    def mov_up(self, z = 50):
+        self.move_handle.RelMovL(0,0,z,0)
+
     def pick_up(self, DI, DI_goal_status, minZ, point = None):
         if point == None:
             self.move_handle.SyncAll()
@@ -260,8 +263,9 @@ class RobotProcessor:
 
     def wait_DI(self, DI, DI_goal_status, end_point = [0,0,1000,0]):
         # while(self.get_DI(DI,get_type="query") != DI_goal_status):
+        point_dim = len(end_point)
         while(self.get_DI(DI,get_type="feed") != DI_goal_status):
-            if(np.allclose(self.feed["tool_vector_actual"][0][:4], end_point, atol=1.)):
+            if(np.allclose(self.feed["tool_vector_actual"][0][:point_dim], end_point, atol=1.)):
                 print("ROBOT REACHED THE GOAL WITHOUT DI TRIGGER")
                 break
             time.sleep(0.01)
