@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     print("    I N I T    C A M E R A S    ")
     print("--------------------------------")
-
+    
 
     d = displays.DisplayProcessor()
 
@@ -60,6 +60,8 @@ if __name__ == '__main__':
 
 
     print_check_camera = cameras.CamProcessor("DA1274571", "print_checker")
+
+    
     # print_check_camera.stream_vision(d)
     # sorter_camera = cameras.CamProcessor("00K81747629", "sorter")
     # sorter_camera.stream_vision(d)

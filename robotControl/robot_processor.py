@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from threading import Thread
 import time
-from tkinter import *
-from tkinter import ttk, messagebox
-from tkinter.scrolledtext import ScrolledText
+# from tkinter import *
+# from tkinter import ttk, messagebox
+# from tkinter.scrolledtext import ScrolledText
 from robotControl.dobot_api import *
 import json
 from robotControl.files.alarm_controller import alarm_controller_list
 from robotControl.files.alarm_servo import alarm_servo_list
-import sys
+# import sys
 import numpy as np
 
 LABEL_JOINT = [["J1-", "J2-", "J3-", "J4-"],
@@ -58,7 +58,7 @@ class RobotProcessor:
             self.feed_handle = DobotApi(
                 ip, feed_port, self.text_log)
         except Exception as e:
-            messagebox.showerror("Attention!", f"Connection Error:{e}")
+            print("Attention!", f"Connection Error:{e}")
             return None
         
         self.connected = True
@@ -159,7 +159,7 @@ class RobotProcessor:
         elif mtype == "movl":
             self.move_handle.MovL(point[0],point[1],point[2],point[3], *args)
         else:
-            print("posrals mtype")
+            print("wrong mtype")
 
     def speed(self,speed):
         self.dashboard_handle.SpeedFactor(speed)
@@ -180,7 +180,7 @@ class RobotProcessor:
     def mirror(self):
         points = self.get_draging_points()
         if len(points)<2:
-            print("zadal jsi málo bodů")
+            print("too few points, terminating mirroring")
             return
 
         if self.feed['speed_scaling'] > 40:
@@ -822,8 +822,8 @@ class DumbRobotProcessor:
                     self.display_error_info()
                     time.sleep(0.1)
 
-            # time.sleep(0.005)
 
+            # time.sleep(0.005)
     def display_error_info(self):
         error_list = self.dashboard_handle.GetErrorID().split("{")[1].split("}")[0]
 

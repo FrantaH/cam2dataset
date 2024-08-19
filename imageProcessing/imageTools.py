@@ -12,27 +12,21 @@ from tools import *
 
 import displayControl.display as displays
 
-ORIGINAL = 0
-IMPURITY = 1
-BASE = 2
-RENTGEN = 3
-DMC = 4
-PICTOGRAMS = 5
-OCR = 6
-
-RESULTS_SIZE = 7
 
 
-
-def load_baseImg(file_name='C:\\Users\\Uzivatel\\Desktop\\python_slider\\croped_base.jpg'):
+def load_baseImg(file_name='C:\\Users\\Uzivatel\\Desktop\\slider\\resources\\base\\EMOXICEL_FAM_Trium_correct.jpg'):
     base_image = cv2.imread(file_name)
     base_gray = cv2.cvtColor(base_image, cv2.COLOR_BGR2GRAY)
 
     return base_gray
 
 @time_measure
-def process_base_image(file_name='C:\\Users\\Uzivatel\\Desktop\\python_slider\\resources\\base\\EMOXICEL_FAM_Trium_correct.jpg'):
-# Read the image
+def process_base_image(file_name='C:\\Users\\Uzivatel\\Desktop\\slider\\resources\\base\\EMOXICEL_FAM_Trium_correct.jpg', parameters={}):
+    
+    # parameters to train:
+    dilatation_size = parameters.get('base_dilatation_size', 25)
+    
+    # Read the image
     base_image = cv2.imread(file_name)
     text_image = cv2.imread(file_name.replace(".jpg","_text.jpg"))
 
@@ -54,8 +48,8 @@ def process_base_image(file_name='C:\\Users\\Uzivatel\\Desktop\\python_slider\\r
     dmc_code = decoded_objects[0].data.decode('utf-8')
 
     # Dilate the inverted image
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (10, 10))
-    inverted_dilated_base = cv2.dilate(inverted_base, kernel, iterations=3)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    inverted_dilated_base = cv2.dilate(inverted_base, kernel, iterations=dilatation_size)
 
     # create text mask
     text_mask = cv2.erode(text_binary, kernel, iterations=4)
@@ -82,87 +76,110 @@ def process_base_image(file_name='C:\\Users\\Uzivatel\\Desktop\\python_slider\\r
     return dmc_code, inverted_dilated_base, base_data_dict_list, binary_image, text_mask
 
 @time_measure
-def preprocess_trainImg(img_image):
+def preprocess_trainImg(img_gray, messy_binarization = False, parameters={}):
 
     # parameters to train:
-    contrast = 2.0
-    brightness = -10
-    canny_low = 60
-    canny_high = 110
-    threshold = 60
+    contrast = parameters.get('contrast', 2.0)
+    brightness = parameters.get('brightness', -10)
+    canny_low = parameters.get('canny_low', 40)
+    canny_high = parameters.get('canny_high', 110)
+    threshold = parameters.get('threshold', 60)
 
-
-
-    # display=True
-    # load image
-    # img_gray = cv2.cvtColor(img_image, cv2.COLOR_BGR2GRAY)
-    img_gray = img_image
+    # gaus binarization neighborhood size
+    neighborhood_size = parameters.get('neighborhood_size', 91)
+    # gaus binarization threshold adjustment
+    threshold_adjustment = parameters.get('threshold_adjustment', 30)
+    # surrounding around edges erase (should be lower than neighborhood_size/2)
+    surrounding = parameters.get('surrounding', 35)
     
-    # d.show_image(img_gray)
+
+    # Increase contrast and brightness
+    enhanced_image = cv2.convertScaleAbs(img_gray, alpha=contrast, beta=brightness)
+
     # Edge highlighting
     edges = cv2.Canny(img_gray, canny_low, canny_high)
-
-    # return edges
-    # Increase contrast
-    alpha = contrast # Contrast control (1.0-3.0)
-    beta = brightness     # Brightness control (0-100)
-    enhanced_image = cv2.convertScaleAbs(img_gray, alpha=alpha, beta=beta)
-    # enhanced_image = img_gray
-
-    # d.show_image(enhanced_image)
     subtracted_image = cv2.subtract(enhanced_image, edges)
-    # d.show_image(subtracted_image)
 
 
-    gauss_filtered_image = subtracted_image
-    # return gauss_filtered_image
-    # gauss_filtered_image = cv2.GaussianBlur(subtracted_image, (3, 3), 0)
+    # binarization and contour finding
+    # binarization with static value
+    _, rough_binarized_image = cv2.threshold(subtracted_image, threshold, 255, cv2.THRESH_BINARY)
+    # otsu thresholding
+    # _, rough_binarized_image = cv2.threshold(subtracted_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # find contours for masking out the background around package
+    contours, _ = cv2.findContours(rough_binarized_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    # filter out contours with area too different from 4600000
+    potential_contours = []
+    # print("contours count: ", len(contours))
+    for contour in contours:
+        if abs(cv2.contourArea(contour) - 4600000) < 200000:
+            potential_contours.append(contour)
 
-    # gauss_filtered_image = cv2.bilateralFilter(subtracted_image, 7, 11, 11)
-    # gauss_filtered_image = cv2.medianBlur(subtracted_image, 7)
-    # d.show_image(gauss_filtered_image,name="gauss_filtered_image")
+    # check empty list
+    if len(potential_contours) == 0:
+        print("no contour found")
+        return enhanced_image
 
-    # d.show_image(gauss_filtered_image, name="gaussed")
-    _, binarized_image = cv2.threshold(gauss_filtered_image, threshold, 255, cv2.THRESH_BINARY_INV)
-    # _, binarized_image = cv2.threshold(gauss_filtered_image, np.mean(gauss_filtered_image), 255, cv2.THRESH_BINARY)
-    # binarized_image = cv2.adaptiveThreshold(gauss_filtered_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 41, 1)
+    mask = np.zeros_like(enhanced_image)
+    mask = cv2.bitwise_not(mask)
+    cv2.drawContours(mask, [potential_contours[-1]], -1, 0, -1)
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    mask = cv2.dilate(mask, kernel, iterations=2)
+    # apply the mask
+    enhanced_image = cv2.bitwise_or(enhanced_image, mask)
 
-    # find contours
+    subtracted_image = cv2.drawContours(subtracted_image, [potential_contours[-1]], -1, 128, 2)
+
+    # return subtracted_image
+
+    binarized_image = cv2.adaptiveThreshold(subtracted_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, neighborhood_size, threshold_adjustment)
+
+    # otsu thresholding
+    # _, binarized_image = cv2.threshold(gauss_filtered_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # create a mask to clear the mess due to gaussian binarization
+    mask = cv2.dilate(edges, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (surrounding, surrounding)), iterations=1)
+    mask = cv2.bitwise_not(mask)
+    binarized_image = cv2.add(binarized_image, mask)
+
+    # find contours for masking out the background around package
     contours, _ = cv2.findContours(binarized_image, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-
-
     # find second biggest contour
     contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    contour = contours[1]
-    
-    
-    # find the biggest contour
-    # contour = max(contours, key=cv2.contourArea)
+
+    # filter out contours with area too different from 4600000
+    # potential_contours = []
+    # print("contours count: ", len(contours))
+    for contour in contours:
+        if abs(cv2.contourArea(contour) - 4600000) < 200000:
+            potential_contours.append(contour)
+
+    # check empty list
+    if len(potential_contours) == 0:
+        print("no contour found")
+        return enhanced_image
+    else:
+        # sort contours by area
+        potential_contours = sorted(potential_contours, key=cv2.contourArea, reverse=True)
+
+    # draw potential_contours on the image
+    # print("potential contours count: ", len(potential_contours))
+    # enhanced_image = cv2.drawContours(enhanced_image, [contour], -1, 128, 2)
+
+    if messy_binarization:
+        # otsu thresholding
+        gauss_filtered_image = cv2.GaussianBlur(subtracted_image, (5, 5), 0)
+        _, binarized_image = cv2.threshold(gauss_filtered_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
 
     # create a mask
     mask = np.zeros_like(binarized_image)
     mask = cv2.bitwise_not(mask)
-    cv2.drawContours(mask, [contour], -1, 0, -1)
-    # cv2.drawContours(binarized_image, [contour], -1, 128, -1)
-    # return binarized_image
-    # invert the mask
-    binarized_image = cv2.bitwise_not(binarized_image)
-    # dilate mask
+    cv2.drawContours(mask, [potential_contours[-1]], -1, 0, -1)
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     mask = cv2.dilate(mask, kernel, iterations=2)
-
     # apply the mask
     binarized_image = cv2.bitwise_or(binarized_image, mask)
-
-    # cv2.imshow("binarized_image", binarized_image)
-    # cv2.waitKey(0)
-    # cv2.destroyWindow("binarized_image")
-
-    # Change brightness
-    # brightness = 50
-    # enhanced_image = np.where((255 - enhanced_image) < brightness, 255, enhanced_image + brightness)
-
 
     return binarized_image
 
@@ -252,17 +269,20 @@ def cleanse_dict_base(text_dict_list):
     return clean_dict_list
 
 @time_measure
-def pictograms_control(base_img, train_img, H, results):
+def pictograms_control(base_img, train_img, H, results, parameters={}):
+
+    dilatation_size = parameters.get('pictograms_dilatation_size', 25)
 
     # Dilate the inverted image
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
-    dilated_img = cv2.erode(train_img, kernel, iterations=3)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    dilated_img = cv2.erode(train_img, kernel, iterations=dilatation_size)
     inverted_img = cv2.bitwise_not(dilated_img)
 
     warped_base = cv2.warpPerspective(base_img, H, (train_img.shape[1], train_img.shape[0]), borderValue=255)
 
     or_img = cv2.bitwise_or(inverted_img, warped_base)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+
+    # highlight the differences
     dilated_or_img = cv2.erode(or_img, kernel, iterations=3)
 
     # overlay = cv2.addWeighted(inverted_img, 0.5, warped_base, 0.5, 0)
@@ -274,13 +294,30 @@ def pictograms_control(base_img, train_img, H, results):
     print("mean of pictograms_control = " + str(mean))
 
 @time_measure
-def dmc_control(dmc_code, train_img, results):
-    decoded_objects = decode(train_img, max_count=1, timeout=2000)
+def dmc_control(dmc_code, train_img, results, parameters={}):
+    # changable parameters
+        # možnost měnit parametry v decode funkci
+        # shrink, deviation, threshold, timeout
+        # shrink - zmenšení obrazu
+        # timeout - časový limit pro dekódování - snížení doby zpracování, ale může vzdat detekci správného kódu
+        # ostatní mohou ovlivnit rychlost a úspěšnost dekódování
+
+    shrink = parameters.get('shrink', 1)
+    deviation = parameters.get('deviation', 40)
+    threshold = parameters.get('threshold', 0)
+    timeout = parameters.get('timeout', 300)
+
+
+
+
+    # resize the image to 1/4 of the original size
+    # train_img = cv2.resize(train_img, (0, 0), fx=0.5, fy=0.5)
+
+    decoded_objects = decode(train_img, max_count=1, timeout=timeout, shrink=shrink, deviation=deviation, threshold=threshold)
     # color of result (red - wrong DMC)
     res_color = (0,0,255)
     shape_y, shape_x = train_img.shape
     rect_position = {'left': int(shape_x/2-100),'top': int(shape_y/2-100), 'right': int(shape_x/2+100), 'bottom': int(shape_y/2+100)}
-    print(rect_position)
     results[DMC] = (rect_position, res_color)
     print(COLOR_RED)
     if len(decoded_objects) != 1:
@@ -297,25 +334,27 @@ def dmc_control(dmc_code, train_img, results):
         print("output dmc:\t" + str(decoded_objects[0].data.decode('utf-8')))
         # decoded_objects[0].rect=Rect(left=5, top=6, width=96, height=95))
 
-        print(decoded_objects[0].rect.left)
         rect_position = {   'left': decoded_objects[0].rect.left,
                             'top': (shape_y - decoded_objects[0].rect.top - decoded_objects[0].rect.height), 
                             'right': (decoded_objects[0].rect.left + decoded_objects[0].rect.width), 
                             'bottom': (shape_y - decoded_objects[0].rect.top)} #  + decoded_objects[0].rect.height
         results[DMC] = (rect_position, res_color)
     print(COLOR_RESET)
-    print(results[DMC])
+    # print(results[DMC])
 
 @time_measure
 def impurity_control(inverted_dilated_base, train_img, H, results):
+
 
     warped_base = cv2.warpPerspective(inverted_dilated_base, H, (train_img.shape[1], train_img.shape[0]))
 
     # impurity_image = cv2.addWeighted(train_img, 1, warped_base, 1, 0)
     impurity_image = cv2.bitwise_or(train_img, warped_base)
+
+
+    # highlight the differences
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     impurity_image = cv2.erode(impurity_image, kernel, iterations = 3)
-
 
 
     # overlay = cv2.addWeighted(train_img, 0.5, warped_base, 0.5, 0)
@@ -391,27 +430,22 @@ def is_closed_contour(contour):
     return cv2.isContourConvex(approx)
 
 @time_measure
-def rentgen_control(results, img):
+def rentgen_control(img, results, parameters={}):
 
     # tolerance for the pattern matching (0 - 1)
-    pattern_threshold = 0.5
-    canny_threshold_low = 40
-    canny_threshold_high = 75
+    pattern_threshold = parameters.get('pattern_threshold', 0.55)
+
+    canny_threshold_low = parameters.get('canny_threshold_low', 40)
+    canny_threshold_high = parameters.get('canny_threshold_high', 75)
+
     # number of iterations of 3x3 kernel dilate - (should be the size of the dilation in pixels/2 = 10 iterations = 20 pixels)
-    join_iterations = 10
-    surrounding_iterations = 6
+    join_iterations = parameters.get('join_iterations', 11)
+    surrounding_iterations = parameters.get('surrounding_iterations', 6)
 
-    # load the pattern
-    join_pattern = cv2.imread('.\\resources\\general\\svar_pattern19x19.png')
-    # convert to grayscale
-    join_pattern = cv2.cvtColor(join_pattern, cv2.COLOR_BGR2GRAY)
-
-    # gaussian blur
-    join_pattern = cv2.GaussianBlur(join_pattern, (3, 3), 0)
+    # how many pixels to deform pattern for matching bended joins (even number)
+    deform_pixels_by = parameters.get('deform_pixels_by', 8)
 
 
-    border_compensation_vertical = join_pattern.shape[0] // 2
-    border_compensation_horizontal = join_pattern.shape[1] // 2
 
     # gaussian filter
     img = cv2.GaussianBlur(img, (5, 5), 0)
@@ -420,12 +454,70 @@ def rentgen_control(results, img):
     img = cv2.convertScaleAbs(img, alpha=1.5, beta=50)
 
 
-    # template matching with kernel
-    join_mask = cv2.matchTemplate(img, join_pattern, cv2.TM_CCOEFF_NORMED)
+    # load the pattern
+    join_pattern = cv2.imread('.\\resources\\general\\svar_pattern19x19.png')
+    # convert to grayscale
+    join_pattern = cv2.cvtColor(join_pattern, cv2.COLOR_BGR2GRAY)
 
 
-    # add borders to get back to same size as original image
-    join_mask = cv2.copyMakeBorder(join_mask, border_compensation_vertical, border_compensation_vertical, border_compensation_horizontal, border_compensation_horizontal, cv2.BORDER_CONSTANT, value=0)
+    def get_pattern_mask(pattern, img):
+
+        border_compensation_horizontal = pattern.shape[1] // 2
+        border_compensation_vertical = pattern.shape[0] // 2
+
+        pattern_mask = cv2.matchTemplate(img, pattern, cv2.TM_CCOEFF_NORMED)
+        pattern_mask = cv2.copyMakeBorder(pattern_mask, border_compensation_vertical, border_compensation_vertical, border_compensation_horizontal, border_compensation_horizontal, cv2.BORDER_CONSTANT, value=0)
+        return pattern_mask
+
+
+    # gaussian blur
+    join_pattern = cv2.GaussianBlur(join_pattern, (3, 3), 0)
+
+    join_pattern_deformed_v = cv2.resize(join_pattern, (join_pattern.shape[1] - deform_pixels_by, join_pattern.shape[0]), interpolation=cv2.INTER_LINEAR)
+    join_pattern_deformed_h = cv2.resize(join_pattern, (join_pattern.shape[1], join_pattern.shape[0] - deform_pixels_by), interpolation=cv2.INTER_LINEAR)
+    join_pattern_deformed_smaller = cv2.resize(join_pattern, (join_pattern.shape[1] - deform_pixels_by, join_pattern.shape[0] - deform_pixels_by), interpolation=cv2.INTER_LINEAR)
+
+    # get masks for all the patterns
+    join_mask = get_pattern_mask(join_pattern, img)
+    join_mask_deformed_v = get_pattern_mask(join_pattern_deformed_v, img)
+    join_mask_deformed_h = get_pattern_mask(join_pattern_deformed_h, img)
+    join_mask_deformed_smaller = get_pattern_mask(join_pattern_deformed_smaller, img)
+
+    # max of all the masks
+    # join_mask = cv2.max(join_mask, join_mask_deformed_smaller)
+    join_mask_def = cv2.max(join_mask_deformed_h, join_mask_deformed_v)
+    join_mask = cv2.max(join_mask, join_mask_def)
+
+
+    # old code
+    """
+
+        # template matching with kernel
+        join_mask = cv2.matchTemplate(img, join_pattern, cv2.TM_CCOEFF_NORMED)
+
+
+        # deform the join pattern horizontaly (resize horizontally)
+        # deformed_join_pattern = join_pattern.copy()
+        deformed_join_pattern = cv2.resize(join_pattern, (join_pattern.shape[1] - deform_pixels_by, join_pattern.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+        join_mask_horizontal = cv2.matchTemplate(img, deformed_join_pattern, cv2.TM_CCOEFF_NORMED)
+        # join_mask_horizontal = cv2.copyMakeBorder(join_mask_horizontal, border_compensation_vertical, border_compensation_vertical, border_compensation_horizontal - deform_pixels_by, border_compensation_horizontal - deform_pixels_by, cv2.BORDER_CONSTANT, value=0)
+
+        deformed_join_pattern = cv2.resize(join_pattern, (join_pattern.shape[1], join_pattern.shape[0] - deform_pixels_by), interpolation=cv2.INTER_LINEAR)
+
+        join_mask_vertical = cv2.matchTemplate(img, deformed_join_pattern, cv2.TM_CCOEFF_NORMED)
+        # join_mask_vertical = cv2.copyMakeBorder(join_mask_vertical, border_compensation_vertical - deform_pixels_by, border_compensation_vertical - deform_pixels_by, border_compensation_horizontal, border_compensation_horizontal, cv2.BORDER_CONSTANT, value=0)
+
+        # add borders to get back to same size as original image
+        join_mask = cv2.copyMakeBorder(join_mask, border_compensation_vertical, border_compensation_vertical, border_compensation_horizontal, border_compensation_horizontal, cv2.BORDER_CONSTANT, value=0)
+        join_mask_horizontal = cv2.copyMakeBorder(join_mask_horizontal, border_compensation_vertical, border_compensation_vertical, border_compensation_horizontal - deform_pixels_by//2, border_compensation_horizontal - deform_pixels_by//2, cv2.BORDER_CONSTANT, value=0)
+        join_mask_vertical = cv2.copyMakeBorder(join_mask_vertical, border_compensation_vertical - deform_pixels_by//2, border_compensation_vertical - deform_pixels_by//2, border_compensation_horizontal, border_compensation_horizontal, cv2.BORDER_CONSTANT, value=0)
+
+        # max of the three
+        join_mask = cv2.max(join_mask, join_mask_horizontal)
+        join_mask = cv2.max(join_mask, join_mask_vertical)
+    """
+
 
     # thresholding
     join_mask = cv2.threshold(join_mask, pattern_threshold, 1., cv2.THRESH_BINARY)[1]
@@ -434,7 +526,8 @@ def rentgen_control(results, img):
     join_mask = cv2.normalize(join_mask, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
     # dilate the result
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    # kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     join_mask = cv2.dilate(join_mask, kernel, iterations=join_iterations)
 
     # find contours
@@ -442,14 +535,14 @@ def rentgen_control(results, img):
     contours, _ = cv2.findContours(join_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
     # print count of contours
-    print("count of contours: ", len(contours))
+    # print("count of contours: ", len(contours))
 
     sorted_contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
     # pick the largest contour
     # contour = max(contours, key=cv2.contourArea)
     contour = sorted_contours[0]
-    print("contour area: ", cv2.contourArea(contour))
+    # print("contour area: ", cv2.contourArea(contour))
 
     # check wheter the contour is closed and big enough
     if not is_closed_contour(contour) or cv2.contourArea(contour) < 100000:
@@ -462,12 +555,18 @@ def rentgen_control(results, img):
         join_mask = join_mask[y:y+h, x:x+w]
         # overlay = cv2.addWeighted(img, 0.5, join_mask, 0.5, 0)
         overlay = cv2.bitwise_or(img, join_mask)
-        results[RENTGEN] = overlay
+        join_mask = cv2.bitwise_not(join_mask)
+        results[RENTGEN] = join_mask
         return overlay
 
     # mask the outside of contour to white
     mask = np.ones_like(join_mask)*255
-    join_mask = cv2.drawContours(mask, [sorted_contours[1]], -1, 0, -1)
+
+    # smooth the contour sorted_contours[1] - second largest contour
+    smooth_contour = cv2.approxPolyDP(sorted_contours[1], 0.001*cv2.arcLength(contour, True), True)
+
+    # join_mask = cv2.drawContours(mask, [sorted_contours[1]], -1, 0, -1)
+    join_mask = cv2.drawContours(mask, [smooth_contour], -1, 0, -1)
 
     # join_mask = cv2.add(join_mask, mask)
 
@@ -503,8 +602,8 @@ def rentgen_control(results, img):
 
     # canny edge detection
     cannied = cv2.Canny(tmp_img, canny_threshold_low, canny_threshold_high)
-    # cannied = cv2.bitwise_and(cannied, cannied, mask=close_to_join_mask)
-
+    cannied_masked = cv2.bitwise_and(cannied, cannied, mask=close_to_join_mask)
+    
 
     # # Part with local variance computation    
     # aoi = aoi.astype(np.float32)
@@ -520,11 +619,16 @@ def rentgen_control(results, img):
     # aoi = variance.astype(np.uint8)
 
 
-    # overlay = cv2.addWeighted(img, 0.5, join_mask, 0.5, 0)
-    overlay = cv2.bitwise_or(img, cannied)
-    results[RENTGEN] = overlay
+    overlay = cv2.addWeighted(img, 0.8, close_to_join_mask, 0.2, 0)
+    # overlay = cv2.bitwise_or(img, cannied)
+    cannied_masked = cv2.bitwise_not(cannied_masked)
 
-    return img
+    results[RENTGEN] = cannied_masked
+
+    if np.mean(cannied_masked) < 255:
+        return cv2.addWeighted(overlay, 0.8, cannied, 0.2, 0)
+
+    return overlay
 
 @time_measure
 def get_homography(base_img, train_img):
@@ -568,7 +672,7 @@ def process_package(base_info, train_img, rentgen_img):
     threads.append(threading.Thread(target=dmc_control, args=(dmc_code, train_img, results)))
     threads[-1].start()
 
-    threads.append(threading.Thread(target=rentgen_control, args=(results,rentgen_img)))
+    threads.append(threading.Thread(target=rentgen_control, args=(rentgen_img, results)))
     threads[-1].start()
 
     enhanced_img = preprocess_trainImg(train_img)

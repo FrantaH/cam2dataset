@@ -8,7 +8,15 @@ COLOR_YELLOW = "\033[93m"
 COLOR_BLUE = "\033[94m"
 COLOR_RESET = "\033[0m"
 
+ORIGINAL = 0
+IMPURITY = 1
+BASE = 2
+RENTGEN = 3
+DMC = 4
+PICTOGRAMS = 5
+OCR = 6
 
+RESULTS_SIZE = 7
 
 
 def time_measure(fce):

@@ -95,10 +95,9 @@ class DisplayProcessor:
 
     def active_wait(self):
         while True:
-            print("blocking display")
-            print("end by pressing escape or 'n'")
+            print("blocking display - end by pressing escape or 'n'")
             key = cv2.waitKey(0) & 0xFF
-            print("key pressed, code: ", str(key))
+            # print("key pressed, code: ", str(key))
             if "\27" == key or ord('n') == key:
                 break
 
