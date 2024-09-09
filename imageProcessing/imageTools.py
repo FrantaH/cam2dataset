@@ -75,7 +75,7 @@ def process_base_image(file_name='C:\\Users\\Uzivatel\\Desktop\\slider\\resource
 
     return dmc_code, inverted_dilated_base, base_data_dict_list, binary_image, text_mask
 
-@time_measure
+# @time_measure
 def preprocess_trainImg(img_gray, messy_binarization = False, parameters={}):
 
     # parameters to train:
@@ -91,7 +91,7 @@ def preprocess_trainImg(img_gray, messy_binarization = False, parameters={}):
     threshold_adjustment = parameters.get('threshold_adjustment', 30)
     # surrounding around edges erase (should be lower than neighborhood_size/2)
     surrounding = parameters.get('surrounding', 35)
-    
+
 
     # Increase contrast and brightness
     enhanced_image = cv2.convertScaleAbs(img_gray, alpha=contrast, beta=brightness)
@@ -183,7 +183,7 @@ def preprocess_trainImg(img_gray, messy_binarization = False, parameters={}):
 
     return binarized_image
 
-@time_measure
+# @time_measure
 def knn_brute_matching(des1, des2):
 
     # Create a BFMatcher object
@@ -319,28 +319,29 @@ def dmc_control(dmc_code, train_img, results, parameters={}):
     shape_y, shape_x = train_img.shape
     rect_position = {'left': int(shape_x/2-100),'top': int(shape_y/2-100), 'right': int(shape_x/2+100), 'bottom': int(shape_y/2+100)}
     results[DMC] = (rect_position, res_color)
-    print(COLOR_RED)
-    if len(decoded_objects) != 1:
-        print("wrong count of DMC codes on image")
-    else:
+    if len(decoded_objects) == 1:
         if str(dmc_code) == str(decoded_objects[0].data.decode('utf-8')):
             res_color = (0,255,0)
-            print(COLOR_GREEN)
-            print("DMC is OK ...", res_color)
-        else:
-            print("DMC is NOT ok ...", res_color)
+            # print(COLOR_GREEN)
+            # print("DMC is OK ...", res_color)
+        # else:
+        #     print(COLOR_RED)
+        #     print("DMC is NOT ok ...", res_color)
 
-        print("input dmc:\t" + str(dmc_code))
-        print("output dmc:\t" + str(decoded_objects[0].data.decode('utf-8')))
-        # decoded_objects[0].rect=Rect(left=5, top=6, width=96, height=95))
-
+        # print("input dmc:\t" + str(dmc_code))
+        # print("output dmc:\t" + str(decoded_objects[0].data.decode('utf-8')))
+        
+        
         rect_position = {   'left': decoded_objects[0].rect.left,
                             'top': (shape_y - decoded_objects[0].rect.top - decoded_objects[0].rect.height), 
                             'right': (decoded_objects[0].rect.left + decoded_objects[0].rect.width), 
                             'bottom': (shape_y - decoded_objects[0].rect.top)} #  + decoded_objects[0].rect.height
         results[DMC] = (rect_position, res_color)
-    print(COLOR_RESET)
-    # print(results[DMC])
+    # else:
+    #     print(COLOR_RED)
+    #     print("wrong count of DMC codes on image")
+
+    # print(COLOR_RESET)
 
 @time_measure
 def impurity_control(inverted_dilated_base, train_img, H, results):
@@ -563,7 +564,7 @@ def rentgen_control(img, results, parameters={}):
     mask = np.ones_like(join_mask)*255
 
     # smooth the contour sorted_contours[1] - second largest contour
-    smooth_contour = cv2.approxPolyDP(sorted_contours[1], 0.001*cv2.arcLength(contour, True), True)
+    smooth_contour = cv2.approxPolyDP(sorted_contours[1], 0.001*cv2.arcLength(sorted_contours[1], True), True)
 
     # join_mask = cv2.drawContours(mask, [sorted_contours[1]], -1, 0, -1)
     join_mask = cv2.drawContours(mask, [smooth_contour], -1, 0, -1)
@@ -603,7 +604,7 @@ def rentgen_control(img, results, parameters={}):
     # canny edge detection
     cannied = cv2.Canny(tmp_img, canny_threshold_low, canny_threshold_high)
     cannied_masked = cv2.bitwise_and(cannied, cannied, mask=close_to_join_mask)
-    
+
 
     # # Part with local variance computation    
     # aoi = aoi.astype(np.float32)
