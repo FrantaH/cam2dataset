@@ -1,0 +1,9 @@
+./__pycache__
+.*/__pycache__
+*/__pycache__
+*.pyc
+TCP-IP-py-API-MG400/
+TCP-IP-py-API-nova5/
+resources/general/
+resources/rentgen_images_old/
+image.jpg

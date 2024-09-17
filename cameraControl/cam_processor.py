@@ -43,11 +43,12 @@ def show_image(image, name="SImage"):
 
 class CamProcessor:
 
-    def __init__(self, serial, name, exposure_time = 0):
+    def __init__(self, serial, name, exposure_time = 0, crop_background = 0):
         deviceList = MV_CC_DEVICE_INFO_LIST()
         tlayerType = MV_USB_DEVICE
         self.name = name
         self.background = None
+        self.crop_background = crop_background
 
         # ch:枚举设备 | en:Enum device
         ret = MvCamera.MV_CC_EnumDevices(tlayerType, deviceList)
@@ -207,8 +208,8 @@ class CamProcessor:
 
     def lookup_package(self, threshold=2):
 
-        # if(self.background is None):
-        #     raise ValueError("Background is not set. Capture background first.")
+        if(self.background is None):
+            raise ValueError("Background is not set. Capture background first.")
 
         # Start grabbing images
         ret = self.cam.MV_CC_StartGrabbing()
@@ -231,8 +232,9 @@ class CamProcessor:
             if stOutFrame.pBufAddr and ret == 0:
                 # Convert the image data pointer to a numpy array
                 img_data = np.ctypeslib.as_array(stOutFrame.pBufAddr, shape=(stOutFrame.stFrameInfo.nHeight, stOutFrame.stFrameInfo.nWidth))
-                gauss_img_data = normalize_and_reduce_img(img_data)
-
+                gauss_img_data = img_data[:, self.crop_background:]
+                gauss_img_data = normalize_and_reduce_img(gauss_img_data)
+                
                 if prev_frame is not None:
 
 
@@ -275,18 +277,18 @@ class CamProcessor:
 
         return prev_frame  # Return the image of the stopped package
 
-    def wait_for_background(self):
+    def wait_for_background(self, threshold=6):
         
         if(self.background is None):
             raise ValueError("Background is not set. Capture background first.")
 
         while(True):
             time.sleep(0.2)
-            new_image = normalize_and_reduce_img(self.get_image())
+            new_image = normalize_and_reduce_img(self.get_image()[:, self.crop_background:])
             dif = mse(new_image, self.background)
             # show_image(new_image)
             print(self.name + " diff is: ", dif)
-            if dif < 6:  # is background
+            if dif < threshold:  # is background
                 # update background
                 self.update_background(img=new_image)
 
@@ -297,18 +299,64 @@ class CamProcessor:
                 break
             # time.sleep(1)
 
-    def capture_background(self):
-        # self.background = self.get_normalized_image()
-        background = self.get_image()
-        self.height, self.width = background.shape[:2]
-        print(self.name + " shape of background (and camera resoltion): height:", self.height, " width:", self.width)
-        self.background = normalize_and_reduce_img(background)
+    def wait_package_leave(self, threshold=6):
 
+        if(self.background is None):
+            raise ValueError("Background is not set. Capture background first.")
+
+        new_image = normalize_and_reduce_img(self.get_image()[:, self.crop_background:])
+        # crop image from left by 500px
+        # new_image = new_image[:, 500//4:]
+        # first_dif = mse(new_image, self.background)
+
+
+        while(True):
+            time.sleep(0.2)
+            old_image = new_image
+            new_image = normalize_and_reduce_img(self.get_image()[:, self.crop_background:])
+            # new_image = new_image[:, 500/4:]
+            dif = mse(new_image, self.background)
+            # show_image(new_image)
+            print(self.name + " diff is: ", dif)
+            if dif < threshold:  # is background
+                # update background
+                self.update_background(img=new_image)
+
+                # double check?
+                # if mse(cv2.GaussianBlur(self.get_image(), (3, 3), 0), self.background) < 5:  # is background
+                #     break
+                break
+            elif mse(new_image, old_image) < 2:
+                if dif < threshold+5:
+                    print("Package is not moving, but has high diff (in tolerance). diff: " + str(dif))
+                    self.update_background(img=new_image)
+                    break
+                else:
+                    raise ValueError("Package is not moving, but is not background. diff: " + str(dif))
+            # time.sleep(1)
+
+        return new_image
+
+    def capture_background(self):
+        background = self.get_image()[:, self.crop_background:]
+        self.background = normalize_and_reduce_img(background)
         return self.background
 
     def update_background(self, img=None):
         if img is not None:
-            self.background = np.uint8((self.background * 0.7) + (img * 0.3))
+            if img.shape == self.background.shape:
+                self.background = np.uint8((self.background * 0.7) + (img * 0.3))
+                return
+            
+            if normalize_and_reduce_img(img).shape == self.background.shape:
+                self.background = np.uint8((self.background * 0.7) + (normalize_and_reduce_img(img) * 0.3))
+                return
+            
+            img_tmp = normalize_and_reduce_img(img[:, self.crop_background:])
+            if img_tmp.shape == self.background.shape:
+                self.background = np.uint8((self.background * 0.7) + (img_tmp * 0.3))
+            else:
+                raise ValueError("Image is not the same size as the background. Image shape: " + str(img.shape) + " Background shape: " + str(self.background.shape))
         else:
             self.background = np.uint8((self.background * 0.7) + (normalize_and_reduce_img(self.get_image()) * 0.3))
 
