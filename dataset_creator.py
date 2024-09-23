@@ -15,8 +15,8 @@ import keyboard
 
 
 # ask for dataset name and label
-dataset_name = "asd"
-# dataset_name = input("Enter dataset name: ")
+dataset_name = "1_small_secondary"
+#dataset_name = input("Enter dataset name: ")
 label_cam1 = "print_checker"
 label_cam2 = "rentgen"
 
@@ -27,17 +27,11 @@ path_rentgen = os.path.join("resources", dataset_name, label_cam2)
 os.makedirs(path_rentgen, exist_ok=True)
 
 
-# # turn on relay 1
-# ser.write(b"AT+O1")
-# input("Press enter to turn off relay 1")
-# # turn off relay 2
-# ser.write(b"AT+C1")
-# input("Press enter to turn on relay 2")
-# # turn on relay 2
-# ser.write(b"AT+O2")
-# input("Press enter to turn off relay 2")
-# # turn off relay 2
-# ser.write(b"AT+C2")
+# open and configure the serial port
+ser = serial.Serial("COM4", 9600, timeout=1)
+time.sleep(2)
+
+
 def open_gate_ok():
     ser.write(b"AT+O1")
 
@@ -48,16 +42,13 @@ def close_gate():
     ser.write(b"AT+AC")
 
 
-# open and configure the serial port
-ser = serial.Serial("COM6", 9600, timeout=1)
-time.sleep(2)
 
-# open_gate_ok()
-# time.sleep(2)
-# close_gate()
-# time.sleep(2)
-# open_gate_fail()
-# time.sleep(2)
+#open_gate_ok()
+#time.sleep(2)
+#close_gate()
+#time.sleep(2)
+#open_gate_fail()
+#time.sleep(2)
 close_gate()
 
 
@@ -84,13 +75,17 @@ def on_press(event):
         print("Pausing")
         input("Press enter to continue")
         print("Continuing")
+    elif(event.name == 'r'):
+        close_gate()
+        camera_print.capture_background()
+        
 
 
 
 keyboard.hook(on_press)
 
-
-input("Press enter to capture the background")
+time.sleep(0.1)
+#input("Press enter to capture the background")
 camera_print.capture_background()
 d.show_image(camera_print.background)
 
@@ -103,9 +98,11 @@ while True:
     #     break
 
     frame = camera_print.lookup_package()
-    # frame = camera_print.get_image()
+    frame = camera_print.get_rgb_image()
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     cv2.imwrite(os.path.join(path_print, f"{len(os.listdir(path_print))}.png"), frame)
-    frame_rentgen = camera_rentgen.get_image()
+    frame_rentgen = camera_rentgen.get_rgb_image()
+    frame_rentgen = cv2.cvtColor(frame_rentgen, cv2.COLOR_BGR2RGB)
     cv2.imwrite(os.path.join(path_rentgen, f"{len(os.listdir(path_rentgen))}.png"), frame_rentgen)
 
     d.show_image(frame)
@@ -114,7 +111,8 @@ while True:
     print("Opening the gate")
     if(r==1):
         open_gate_ok()
-        r=0
+        time.sleep(1)
+        #r=0
     else:
         open_gate_fail()
         r=1

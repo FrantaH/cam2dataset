@@ -773,6 +773,8 @@ class MvCamera():
 
     # en:Pixel format conversion,Comparing with the API MV_CC_ConvertPixelType, this API support the parameter nWidth * nHeight * pixelsize to UINT_MAX.
     def MV_CC_ConvertPixelTypeEx(self, stConvertParam):
+        return self.MV_CC_ConvertPixelType(stConvertParam)
+
         MvCamCtrldll.MV_CC_ConvertPixelTypeEx.argtype = (c_void_p, c_void_p)
         MvCamCtrldll.MV_CC_ConvertPixelTypeEx.restype = c_uint
         # C原型:int MV_CC_ConvertPixelTypeEx(IN void* handle, IN OUT MV_CC_PIXEL_CONVERT_PARAM_EX* pstCvtParam);

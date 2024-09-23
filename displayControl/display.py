@@ -1,8 +1,6 @@
 import cv2
 import numpy as np
 import time
-import pyautogui
-import matplotlib.pyplot as plt
 import os
 
 
@@ -32,10 +30,10 @@ class DisplayProcessor:
 
 
 
-        # # cv2.resizeWindow(name, 1600, 900)  # Set your desired size here
+        cv2.resizeWindow(name, 1600, 900)  # Set your desired size here
 
         # Set window properties for full screen
-        cv2.setWindowProperty(name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+        # cv2.setWindowProperty(name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
         # print(os.path.dirname(__file__))
 
         # optionaly

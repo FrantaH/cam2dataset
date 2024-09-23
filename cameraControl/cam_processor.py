@@ -153,13 +153,13 @@ class CamProcessor:
     
         ret = self.cam.MV_CC_GetImageBuffer(stOutFrame, 1000)
 
-        # print("pixel type: ", stOutFrame.stFrameInfo.enPixelType) # PixelType_Gvsp_BayerRG8
-        # print("frame len: ", stOutFrame.stFrameInfo.nFrameLen)
+        #print("pixel type: ", stOutFrame.stFrameInfo.enPixelType) # PixelType_Gvsp_BayerRG8
+        #print("frame len: ", stOutFrame.stFrameInfo.nFrameLen)
 
 
 
         nRGBSize = stOutFrame.stFrameInfo.nWidth * stOutFrame.stFrameInfo.nHeight * 3
-        stConvertParam = MV_CC_PIXEL_CONVERT_PARAM_EX()
+        stConvertParam = MV_CC_PIXEL_CONVERT_PARAM()
         memset(byref(stConvertParam), 0, sizeof(stConvertParam))
         stConvertParam.nWidth = stOutFrame.stFrameInfo.nWidth
         stConvertParam.nHeight = stOutFrame.stFrameInfo.nHeight
@@ -170,7 +170,7 @@ class CamProcessor:
         stConvertParam.pDstBuffer = (c_ubyte * nRGBSize)()
         stConvertParam.nDstBufferSize = nRGBSize
 
-        ret = self.cam.MV_CC_ConvertPixelTypeEx(stConvertParam)
+        ret = self.cam.MV_CC_ConvertPixelType(stConvertParam)
         if ret != 0:
             print ("convert pixel fail! ret[0x%x]" % ret)
             sys.exit()
@@ -326,7 +326,7 @@ class CamProcessor:
                 # if mse(cv2.GaussianBlur(self.get_image(), (3, 3), 0), self.background) < 5:  # is background
                 #     break
                 break
-            elif mse(new_image, old_image) < 2:
+            elif mse(new_image, old_image) < 1:
                 if dif < threshold+5:
                     print("Package is not moving, but has high diff (in tolerance). diff: " + str(dif))
                     self.update_background(img=new_image)
