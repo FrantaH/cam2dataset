@@ -1,9 +1,32 @@
-# ask for dataset name and label
-# create a folder with the name in /resources/name/label
-# open and connect to the camera
-# wait for the user to press enter to take a picture
-# save the picture in the folder
-# repeat until the user types 'exit'
+# zapojím vše do elektriky
+# zkontroluji že kamera svítí modře
+# zapnu světlo
+# spustím program:
+# zeptám se na jméno datasetu
+# vytvořím složku resources/jméno
+# připojím ke kamerám
+# ZAČÁTEK CYKLU
+# začnu čekat na balík
+# když přijde balík vyfotím oběma kamerama
+# uložím do resources/jméno/kamera
+# otevřu přepážku a čekám na to až odjede balík 
+# zavřu přepážku
+
+
+# POZNÁMKY K CHODU PROGRAMU:
+# Bedna má obrovský problém se statickou elekřinou, balíky se extrémně často přilepí ke sklu a nekloužou
+# tento problém otestoval schopnost programu poznat že balík neodjel ze skluzu (funguje)
+# Bylo otestování posílání balíků vzhůru nohama (po skle klouzala papírová část) - zde nebyl problém s přilepením
+# Balíky focené vzhůru nohama mají 
+#   výhody:
+    # nelepí se na sklo
+    # svou vahou se srovná povrch (není deformace sváru a rohů)
+#   nevýhody:
+    # při průhledu rentgenem je čitelný natištěný text a tedy může překážet v dalším zpracování
+    # při případném vyměnění směru nasvícení (kamer) by se odráželo světlo od skla do kamery (rentgen by fungoval lépe, ale nebylo by možné vyfotit balík z druhé strany (odlesky))
+
+# je znatelný stín na kraji bedny u přepážky, teoreticky by neměl vadit a mohlo by ho jít automaticky staticky odstranit (lokálně zvýšit jas)
+
 
 import cv2
 import os
@@ -15,7 +38,7 @@ import keyboard
 
 
 # ask for dataset name and label
-dataset_name = "1_small_secondary"
+dataset_name = "2_large_secondary"
 #dataset_name = input("Enter dataset name: ")
 label_cam1 = "print_checker"
 label_cam2 = "rentgen"
@@ -70,15 +93,7 @@ def on_press(event):
     elif(event.name == 'f'):
         open_gate_fail()
         print("Opening the gate")
-    elif(event.name == 'p'):
-        # pause
-        print("Pausing")
-        input("Press enter to continue")
-        print("Continuing")
-    elif(event.name == 'r'):
-        close_gate()
-        camera_print.capture_background()
-        
+
 
 
 
@@ -96,6 +111,10 @@ while True:
     # w = input("Press enter to take a picture or type exit to exit:")
     # if w == 'exit':
     #     break
+    if keyboard.is_pressed('p'):
+        print("Pausing")
+        input("Press enter to continue")
+        print("Continuing")
 
     frame = camera_print.lookup_package()
     frame = camera_print.get_rgb_image()
@@ -117,31 +136,28 @@ while True:
         open_gate_fail()
         r=1
 
+    if keyboard.is_pressed('p'):
+        print("Pausing")
+        input("Press enter to continue")
+        print("Continuing")
+
     # wait till package is gone
     print("Waiting for the package to leave")
-    after_leav_img = camera_print.wait_package_leave()
-    # d.show_image(after_leav_img)
-    # d.active_wait()
+    try:
+        after_leav_img = camera_print.wait_package_leave()
+        # d.show_image(after_leav_img)
+        # d.active_wait()
+    # except when value error is raised
+    except ValueError as e:
+        print("Error: ", e)
+        input("Press enter after you cleared the slide from mess to continue")
+        close_gate()
+        time.sleep(0.2)
+        camera_print.update_background()
+        continue
+    
 
     close_gate()
-
-
-
-
-
-# zapojím vše do elektriky
-# zkontroluji že kamera svítí modře
-# zapnu světlo
-# spustím program:
-# zeptám se na jméno datasetu
-# vytvořím složku resources/jméno
-# připojím ke kamerám
-# ZAČÁTEK CYKLU
-# začnu čekat na balík
-# když přijde balík vyfotím oběma kamerama
-# uložím do resources/jméno/kamera
-# otevřu přepážku a čekám na to až odjede balík 
-# zavřu přepážku
 
 
 

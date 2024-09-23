@@ -343,6 +343,10 @@ class CamProcessor:
         return self.background
 
     def update_background(self, img=None):
+        if self.background is None:
+            self.capture_background()
+            return
+        
         if img is not None:
             if img.shape == self.background.shape:
                 self.background = np.uint8((self.background * 0.7) + (img * 0.3))
